@@ -46,18 +46,19 @@ const TimeFlow = () => {
     localStorage.setItem('timeflow_settings', JSON.stringify(settings));
   }, [settings]);
 
+  // NOVO: Hook para carregar todos os dados do Supabase quando o aplicativo abre
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        const { data: tasksData, error: tasksError } = await supabase.from('tasks').select('*').order('data_criacao', { ascending: false });
+        const { data: tasksData, error: tasksError } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
         if (tasksError) throw tasksError;
         setTasks(tasksData || []);
 
-        const { data: sessionsData, error: sessionsError } = await supabase.from('sessions').select('*').order('data_criacao', { ascending: false });
+        const { data: sessionsData, error: sessionsError } = await supabase.from('sessions').select('*').order('created_at', { ascending: false });
         if (sessionsError) throw sessionsError;
         setSessions(sessionsData || []);
 
-        const { data: goalsData, error: goalsError } = await supabase.from('goals').select('*').order('data_criacao', { ascending: false });
+        const { data: goalsData, error: goalsError } = await supabase.from('goals').select('*').order('created_at', { ascending: false });
         if (goalsError) throw goalsError;
         setGoals(goalsData || []);
       } catch (error) {
@@ -66,8 +67,7 @@ const TimeFlow = () => {
     };
 
     fetchInitialData();
-  }, []);
-
+  }, []); // O array vazio [] faz com que rode só uma vez.
 
   // Efeito do Timer (sem alterações)
   useEffect(() => {
@@ -181,7 +181,12 @@ const TimeFlow = () => {
 
   // MODIFICADO: Função de Metas agora é 'async' e usa Supabase
   const addGoal = async (goalData) => {
-    const { data, error } = await supabase.from('goals').insert([goalData]).select();
+    const newGoalData = {
+        ...goalData,
+        status: 'ativa',
+        data_criacao: new Date().toISOString(),
+    };
+    const { data, error } = await supabase.from('goals').insert([newGoalData]).select();
      if (error) {
         console.error('Erro ao adicionar meta:', error);
      } else if (data) {
@@ -189,10 +194,10 @@ const TimeFlow = () => {
      }
   };
 
-  // Funções de cálculo de estatísticas (sem alterações)
+  // Funções de cálculo de estatísticas (sem alterações na lógica, mas corrigindo nomes de propriedades)
   const getTodayStats = () => {
     const today = new Date().toDateString();
-    const todaySessions = sessions.filter(session => new Date(session.created_at).toDateString() === today && session.tipo === 'foco');
+    const todaySessions = sessions.filter(session => new Date(session.dataCriacao).toDateString() === today && session.tipo === 'foco');
     const totalMinutes = todaySessions.reduce((sum, session) => sum + session.duracao, 0);
     const progressPercent = Math.min((totalMinutes / settings.meta_diaria_minutos) * 100, 100);
     return { totalMinutes, sessionsCount: todaySessions.length, progressPercent };
@@ -324,7 +329,7 @@ const TimeFlow = () => {
                 <div className="text-right">
                   <div className="text-white font-semibold">{session.duracao} min</div>
                   <div className="text-gray-400 text-sm">
-                    {new Date(session.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(session.dataCriacao).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </div>
               </div>
@@ -582,9 +587,9 @@ const TimeFlow = () => {
                       <CheckCircle className="w-5 h-5 text-green-500" />
                       <div>
                         <span className="text-white line-through">{task.titulo}</span>
-                        {task.data_conclusao &&
+                        {task.dataConclusao &&
                           <p className="text-gray-500 text-sm">
-                            Concluída em {new Date(task.data_conclusao).toLocaleDateString('pt-BR')}
+                            Concluída em {new Date(task.dataConclusao).toLocaleDateString('pt-BR')}
                           </p>
                         }
                       </div>
@@ -620,10 +625,10 @@ const TimeFlow = () => {
             onSave={(taskData) => {
               if (editingTask) {
                 updateTask(editingTask.id, taskData);
-                setEditingTask(null);
               } else {
                 addTask(taskData);
               }
+              setEditingTask(null);
               setShowTaskForm(false);
             }}
             onCancel={() => { setShowTaskForm(false); setEditingTask(null); }}
@@ -645,10 +650,7 @@ const TimeFlow = () => {
     const handleGoalSubmit = (e) => {
         e.preventDefault();
         if (newGoal.titulo.trim()) {
-            addGoal({
-                ...newGoal,
-                status: 'ativa',
-            });
+            addGoal(newGoal); // Chama a nova função 'async'
             setNewGoal({ titulo: '', descricao: '', tipo: 'semanal', meta_minutos: 240 });
             setShowGoalForm(false);
         }
@@ -710,7 +712,7 @@ const TimeFlow = () => {
                 <input
                   type="number"
                   value={newGoal.meta_minutos}
-                  onChange={(e) => setNewGoal(prev => ({ ...prev, meta_minutos: parseInt(e.target.value) }))}
+                  onChange={(e) => setNewGoal(prev => ({ ...prev, meta_minutos: parseInt(e.target.value) || 0 }))}
                   className="w-full p-3 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none"
                   min="1"
                 />
@@ -767,11 +769,11 @@ const TimeFlow = () => {
     const getWeeklyStats = () => {
       const today = new Date();
       const dayOfWeek = today.getDay(); // 0 (Sun) - 6 (Sat)
-      const firstDayOfWeek = new Date(today.setDate(today.getDate() - dayOfWeek));
+      const firstDayOfWeek = new Date(new Date().setDate(today.getDate() - dayOfWeek));
       firstDayOfWeek.setHours(0, 0, 0, 0);
 
       const weekSessions = sessions.filter(session => {
-        const sessionDate = new Date(session.created_at);
+        const sessionDate = new Date(session.dataCriacao);
         return sessionDate >= firstDayOfWeek && session.tipo === 'foco';
       });
       return weekSessions.reduce((sum, session) => sum + session.duracao, 0);
@@ -779,7 +781,7 @@ const TimeFlow = () => {
 
     const tasksStats = {
       todayCompleted: tasks.filter(task =>
-        task.status === 'concluida' && new Date(task.data_conclusao).toDateString() === new Date().toDateString()
+        task.status === 'concluida' && new Date(task.dataConclusao).toDateString() === new Date().toDateString()
       ).length,
       totalPending: tasks.filter(task => task.status === 'pendente').length
     };
@@ -843,7 +845,7 @@ const TimeFlow = () => {
               dayDate.setDate(dayDate.getDate() - dayDate.getDay() + index);
               const dayDateStr = dayDate.toDateString();
               const dayMinutes = sessions
-                .filter(session => new Date(session.created_at).toDateString() === dayDateStr && session.tipo === 'foco')
+                .filter(session => new Date(session.dataCriacao).toDateString() === dayDateStr && session.tipo === 'foco')
                 .reduce((sum, session) => sum + session.duracao, 0);
               const progress = Math.min((dayMinutes / settings.meta_diaria_minutos) * 100, 100);
               return (
@@ -861,6 +863,62 @@ const TimeFlow = () => {
                 </div>
               );
             })}
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-gray-800 rounded-xl p-6">
+            <h3 className="text-white text-lg font-semibold mb-4">Distribuição de Tarefas</h3>
+            <div className="space-y-3">
+                {['alta', 'media', 'baixa'].map(prioridade => {
+                    const count = tasks.filter(task => task.prioridade === prioridade).length;
+                    const total = tasks.length;
+                    const percentage = total > 0 ? (count / total) * 100 : 0;
+                    return (
+                        <div key={prioridade}>
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-gray-300 capitalize">{prioridade}</span>
+                                <span className="text-gray-400 text-sm">{count} tarefas</span>
+                            </div>
+                            <div className="w-full bg-gray-700 rounded-full h-2">
+                                <div
+                                    className={`h-2 rounded-full ${
+                                        prioridade === 'alta' ? 'bg-red-500' :
+                                        prioridade === 'media' ? 'bg-yellow-500' : 'bg-green-500'
+                                    }`}
+                                    style={{ width: `${percentage}%` }}
+                                ></div>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+          </div>
+          <div className="bg-gray-800 rounded-xl p-6">
+            <h3 className="text-white text-lg font-semibold mb-4">Performance</h3>
+            <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                    <span className="text-gray-300">Taxa de Conclusão</span>
+                    <span className="text-white font-semibold">
+                        {tasks.length > 0 ?
+                            Math.round((tasks.filter(t => t.status === 'concluida').length / tasks.length) * 100) : 0
+                        }%
+                    </span>
+                </div>
+                <div className="flex justify-between items-center">
+                    <span className="text-gray-300">Sessões Médias/Dia</span>
+                    <span className="text-white font-semibold">
+                        {sessions.length > 0 ? (sessions.length / 7).toFixed(1) : 0}
+                    </span>
+                </div>
+                <div className="flex justify-between items-center">
+                    <span className="text-gray-300">Tempo Médio/Sessão</span>
+                    <span className="text-white font-semibold">
+                        {sessions.length > 0 ?
+                            Math.round(sessions.reduce((sum, s) => sum + s.duracao, 0) / sessions.length) : 0
+                        } min
+                    </span>
+                </div>
+            </div>
           </div>
         </div>
       </div>
