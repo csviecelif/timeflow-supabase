@@ -46,19 +46,18 @@ const TimeFlow = () => {
     localStorage.setItem('timeflow_settings', JSON.stringify(settings));
   }, [settings]);
 
-  // NOVO: Hook para carregar todos os dados do Supabase quando o aplicativo abre
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        const { data: tasksData, error: tasksError } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
+        const { data: tasksData, error: tasksError } = await supabase.from('tasks').select('*').order('data_criacao', { ascending: false });
         if (tasksError) throw tasksError;
         setTasks(tasksData || []);
 
-        const { data: sessionsData, error: sessionsError } = await supabase.from('sessions').select('*').order('created_at', { ascending: false });
+        const { data: sessionsData, error: sessionsError } = await supabase.from('sessions').select('*').order('data_criacao', { ascending: false });
         if (sessionsError) throw sessionsError;
         setSessions(sessionsData || []);
 
-        const { data: goalsData, error: goalsError } = await supabase.from('goals').select('*').order('created_at', { ascending: false });
+        const { data: goalsData, error: goalsError } = await supabase.from('goals').select('*').order('data_criacao', { ascending: false });
         if (goalsError) throw goalsError;
         setGoals(goalsData || []);
       } catch (error) {
@@ -67,7 +66,8 @@ const TimeFlow = () => {
     };
 
     fetchInitialData();
-  }, []); // O array vazio [] faz com que rode só uma vez.
+  }, []);
+
 
   // Efeito do Timer (sem alterações)
   useEffect(() => {
