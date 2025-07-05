@@ -50,15 +50,15 @@ const TimeFlow = () => {
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        const { data: tasksData, error: tasksError } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
+        const { data: tasksData, error: tasksError } = await supabase.from('tasks').select('*').order('data_criacao', { ascending: false });
         if (tasksError) throw tasksError;
         setTasks(tasksData || []);
 
-        const { data: sessionsData, error: sessionsError } = await supabase.from('sessions').select('*').order('created_at', { ascending: false });
+        const { data: sessionsData, error: sessionsError } = await supabase.from('sessions').select('*').order('data_criacao', { ascending: false });
         if (sessionsError) throw sessionsError;
         setSessions(sessionsData || []);
 
-        const { data: goalsData, error: goalsError } = await supabase.from('goals').select('*').order('created_at', { ascending: false });
+        const { data: goalsData, error: goalsError } = await supabase.from('goals').select('*').order('data_criacao', { ascending: false });
         if (goalsError) throw goalsError;
         setGoals(goalsData || []);
       } catch (error) {
@@ -67,7 +67,8 @@ const TimeFlow = () => {
     };
 
     fetchInitialData();
-  }, []); // O array vazio [] faz com que rode só uma vez.
+  }, []);
+
 
   // Efeito do Timer (sem alterações)
   useEffect(() => {
@@ -140,13 +141,18 @@ const TimeFlow = () => {
 
   // MODIFICADO: Funções de Tarefas agora são 'async' e usam Supabase
   const addTask = async (taskData) => {
-    const { data, error } = await supabase.from('tasks').insert([taskData]).select();
-    if (error) {
-      console.error('Erro ao adicionar tarefa:', error);
-    } else if (data) {
-      setTasks(prev => [data[0], ...prev]);
-      setShowTaskForm(false);
-    }
+      const newTask = {
+          ...taskData,
+          status: 'pendente',
+          data_criacao: new Date().toISOString(),
+      };
+      const { data, error } = await supabase.from('tasks').insert([newTask]).select();
+      if (error) {
+          console.error('Erro ao adicionar tarefa:', error);
+      } else if (data) {
+          setTasks(prev => [data[0], ...prev]);
+          setShowTaskForm(false);
+      }
   };
 
   const updateTask = async (taskId, updates) => {
@@ -196,11 +202,11 @@ const TimeFlow = () => {
 
   // Funções de cálculo de estatísticas (sem alterações na lógica, mas corrigindo nomes de propriedades)
   const getTodayStats = () => {
-    const today = new Date().toDateString();
-    const todaySessions = sessions.filter(session => new Date(session.dataCriacao).toDateString() === today && session.tipo === 'foco');
-    const totalMinutes = todaySessions.reduce((sum, session) => sum + session.duracao, 0);
-    const progressPercent = Math.min((totalMinutes / settings.meta_diaria_minutos) * 100, 100);
-    return { totalMinutes, sessionsCount: todaySessions.length, progressPercent };
+      const today = new Date().toDateString();
+      const todaySessions = sessions.filter(session => new Date(session.data_criacao).toDateString() === today && session.tipo === 'foco');
+      const totalMinutes = todaySessions.reduce((sum, session) => sum + session.duracao, 0);
+      const progressPercent = Math.min((totalMinutes / settings.meta_diaria_minutos) * 100, 100);
+      return { totalMinutes, sessionsCount: todaySessions.length, progressPercent };
   };
 
   const getFilteredTasks = () => {
@@ -270,7 +276,7 @@ const TimeFlow = () => {
     );
   };
 
-  const PomodoroPage = () => {
+const PomodoroPage = () => {
     const todayStats = getTodayStats();
     return (
       <div className="space-y-8">
@@ -320,20 +326,26 @@ const TimeFlow = () => {
         <div className="bg-gray-800 rounded-xl p-6">
           <h3 className="text-white text-lg font-semibold mb-4">Últimas Sessões de Foco</h3>
           <div className="space-y-3">
-            {sessions.slice(0, 5).map(session => (
-              <div key={session.id} className="flex justify-between items-center p-3 bg-gray-700 rounded-lg">
-                <div>
-                  <span className={`inline-block w-3 h-3 rounded-full mr-3 bg-green-500`}></span>
-                  <span className="text-white">Foco</span>
+            {sessions.slice(0, 5).map(session => {
+              // ADICIONADO PARA DEBUGAR:
+              console.log('Objeto da sessão sendo renderizado:', session);
+
+              // ADICIONADO "return" PARA A SINTAXE JSX FUNCIONAR:
+              return (
+                <div key={session.id} className="flex justify-between items-center p-3 bg-gray-700 rounded-lg">
+                    <div>
+                        <span className={`inline-block w-3 h-3 rounded-full mr-3 bg-green-500`}></span>
+                        <span className="text-white">Foco</span>
+                    </div>
+                    <div className="text-right">
+                        <div className="text-white font-semibold">{session.duracao} min</div>
+                        <div className="text-gray-400 text-sm">
+                            {new Date(session.data_criacao).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                    </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-white font-semibold">{session.duracao} min</div>
-                  <div className="text-gray-400 text-sm">
-                    {new Date(session.dataCriacao).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {sessions.length === 0 && (
               <p className="text-gray-400 text-center py-4">Nenhuma sessão registrada ainda</p>
             )}
@@ -587,10 +599,10 @@ const TimeFlow = () => {
                       <CheckCircle className="w-5 h-5 text-green-500" />
                       <div>
                         <span className="text-white line-through">{task.titulo}</span>
-                        {task.dataConclusao &&
-                          <p className="text-gray-500 text-sm">
-                            Concluída em {new Date(task.dataConclusao).toLocaleDateString('pt-BR')}
-                          </p>
+                        {task.data_conclusao &&
+                            <p className="text-gray-500 text-sm">
+                                Concluída em {new Date(task.data_conclusao).toLocaleDateString('pt-BR')}
+                            </p>
                         }
                       </div>
                     </div>
@@ -767,16 +779,15 @@ const TimeFlow = () => {
     const todayStats = getTodayStats();
 
     const getWeeklyStats = () => {
-      const today = new Date();
-      const dayOfWeek = today.getDay(); // 0 (Sun) - 6 (Sat)
-      const firstDayOfWeek = new Date(new Date().setDate(today.getDate() - dayOfWeek));
-      firstDayOfWeek.setHours(0, 0, 0, 0);
-
-      const weekSessions = sessions.filter(session => {
-        const sessionDate = new Date(session.dataCriacao);
-        return sessionDate >= firstDayOfWeek && session.tipo === 'foco';
-      });
-      return weekSessions.reduce((sum, session) => sum + session.duracao, 0);
+        const today = new Date();
+        const dayOfWeek = today.getDay();
+        const firstDayOfWeek = new Date(new Date().setDate(today.getDate() - dayOfWeek));
+        firstDayOfWeek.setHours(0, 0, 0, 0);
+        const weekSessions = sessions.filter(session => {
+            const sessionDate = new Date(session.data_criacao);
+            return sessionDate >= firstDayOfWeek && session.tipo === 'foco';
+        });
+        return weekSessions.reduce((sum, session) => sum + session.duracao, 0);
     };
 
     const tasksStats = {
@@ -845,7 +856,7 @@ const TimeFlow = () => {
               dayDate.setDate(dayDate.getDate() - dayDate.getDay() + index);
               const dayDateStr = dayDate.toDateString();
               const dayMinutes = sessions
-                .filter(session => new Date(session.dataCriacao).toDateString() === dayDateStr && session.tipo === 'foco')
+                .filter(session => new Date(session.data_criacao).toDateString() === dayDateStr && session.tipo === 'foco')
                 .reduce((sum, session) => sum + session.duracao, 0);
               const progress = Math.min((dayMinutes / settings.meta_diaria_minutos) * 100, 100);
               return (
